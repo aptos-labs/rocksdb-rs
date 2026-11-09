@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Cancel superseded runs on a PR, but run every push to main.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  # Makes RocksDB ~25% faster to compile and its objects ~30x smaller.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  # RocksDB dominates build time, and a fresh checkout reruns its build script
+  # even with a cached target/, so cache the C/C++ compiles instead.
+  # Clang 18 is the newest one preinstalled on ubuntu-24.04.
+  CC: sccache clang-18
+  CXX: sccache clang++-18
+  SCCACHE_CACHE_SIZE: 500M
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install nightly --profile minimal --component rustfmt
+      - name: rustfmt
+        run: cargo +nightly fmt --check
+      - name: clang-format
+        if: ${{ !cancelled() }}
+        run: pipx run --spec clang-format==23.1.5 clang-format --dry-run --Werror $(git ls-files '*.cc' '*.h')
+
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+      - run: rustup toolchain install --profile minimal
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.19.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/sccache
+          key: sccache-${{ github.job }}-${{ github.sha }}
+          restore-keys: sccache-${{ github.job }}-
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: rustdoc
+        if: ${{ !cancelled() }}
+        run: cargo doc --workspace --all-features --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+      - run: rustup toolchain install --profile minimal
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.19.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/sccache
+          key: sccache-${{ github.job }}-${{ github.sha }}
+          restore-keys: sccache-${{ github.job }}-
+      # --all-targets would skip the doc tests.
+      - run: cargo test --workspace --all-features --locked
