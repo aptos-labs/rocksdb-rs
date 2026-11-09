@@ -1,0 +1,18 @@
+[package]
+name = "rocksdb-rs-sys"
+description = "Builds RocksDB from source and links it statically. Used by `rocksdb-rs`."
+version = "0.1.0+rocksdb.10.4.2"
+links = "rocksdb"
+build = "build/main.rs"
+edition.workspace = true
+publish.workspace = true
+
+[features]
+default = ["lz4"]
+lz4 = ["dep:lz4-sys"]
+
+[dependencies]
+lz4-sys = { workspace = true, optional = true }
+
+[build-dependencies]
+cc = { workspace = true, features = ["parallel"] }

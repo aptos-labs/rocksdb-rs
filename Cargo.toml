@@ -1,0 +1,40 @@
+[workspace]
+members = [".", "rocksdb-rs-sys"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+cc = "1.2.50"
+cxx = "1.0.205"
+cxx-build = "1.0.205"
+lz4-sys = "1.11.1"
+rocksdb-rs-sys = { path = "rocksdb-rs-sys", version = "0.1.0", default-features = false }
+tempfile = "3.27.0"
+
+[package]
+name = "rocksdb-rs"
+description = "Rust bindings for RocksDB, built on cxx"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+
+[features]
+default = ["lz4"]
+lz4 = ["rocksdb-rs-sys/lz4"]
+
+[dependencies]
+cxx = { workspace = true }
+rocksdb-rs-sys = { workspace = true }
+
+[build-dependencies]
+cxx-build = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+# Unoptimized RocksDB makes tests much slower.
+[profile.dev.package.rocksdb-rs-sys]
+opt-level = 2
